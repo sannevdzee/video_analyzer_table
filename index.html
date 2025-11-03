@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI Video Analyzer - Sanne van der Zee</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="color-scheme" content="light dark" />
+  <style>
+    /* Keep logs/results nicely scrollable without layout shifts */
+    .scroll-area { max-height: 50vh; overflow: auto; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .thumb { inline-size: 140px; block-size: 80px; object-fit: cover; }
+    /* Subtle focus ring for keyboard users */
+    :focus-visible { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
+
+    /* Compare table tweaks */
+    .table-sticky thead th { position: sticky; top: 0; background: white; z-index: 1; }
+    .truncate-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <header class="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+      <h1 class="text-xl sm:text-2xl font-semibold">AI-Powered Frame Analysis</h1>
+      <span id="version" class="text-xs text-slate-500">v1.2 · Comparative Table</span>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl p-4 grid gap-6 lg:grid-cols-3">
+    <!-- LEFT: Controls + Video -->
+    <section class="lg:col-span-2 space-y-4">
+      <!-- Controls Card -->
+      <div class="bg-white rounded-2xl shadow-sm border">
+        <div class="p-4 grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2">
+            <label for="videoFile" class="block text-sm font-medium">Upload a video</label>
+            <input id="videoFile" type="file" accept="video/*"
+                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer" />
+            <p class="text-xs text-slate-500">Supported by your browser (MP4, WebM, etc.).</p>
+          </div>
+
+          <div class="space-y-2">
+            <label for="apiKey" class="block text-sm font-medium">Gemini API key</label>
+            <input id="apiKey" type="password" placeholder="AIza…"
+                   class="w-full rounded-lg border px-3 py-2 text-sm" />
+            <p class="text-xs text-slate-500">Used only in your browser. Not sent anywhere else.</p>
+          </div>
+
+          <div class="space-y-2">
+            <label for="stepSeconds" class="block text-sm font-medium">Step size (seconds)</label>
+            <input id="stepSeconds" type="number" min="1" step="1" value="5"
+                   class="w-32 rounded-lg border px-3 py-2 text-sm" />
+          </div>
+
+          <!-- Perspective Selector -->
+          <div class="space-y-2">
+            <label for="perspectiveSelect" class="block text-sm font-medium">Analysis perspective</label>
+            <select id="perspectiveSelect" class="w-full rounded-lg border px-3 py-2 text-sm">
+              <option value="objective">Objective Description (default)</option>
+              <option value="urban">Urban Planning Analysis</option>
+              <option value="social">Social Dynamics Analysis</option>
+              <option value="safety">Safety Assessment</option>
+              <option value="accessibility">Accessibility Review</option>
+              <option value="fiction">Creative Fiction (First-Person Story)</option>
+            </select>
+            <p class="text-xs text-slate-500">Change this and re-analyze — previous lenses remain for side-by-side comparison.</p>
+          </div>
+
+          <div class="flex items-end justify-start gap-2 sm:col-span-2 flex-wrap">
+            <button id="analyzeBtn"
+              class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              Analyze Video
+            </button>
+            <button id="cancelBtn"
+              class="hidden inline-flex items-center justify-center rounded-xl bg-slate-200 text-slate-900 px-4 py-2 text-sm font-medium hover:bg-slate-300">
+              Cancel
+            </button>
+
+            <button id="reanalyzeBtn"
+              class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Re-process captured frames with the selected perspective">
+              Re-analyze with New Perspective
+            </button>
+            <button id="downloadBtn"
+              class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Download a text report of the current analysis">
+              Download Analysis
+            </button>
+            <!-- New: Download Compare CSV -->
+            <button id="downloadCsvBtn"
+              class="inline-flex items-center justify-center rounded-xl bg-slate-800 text-white px-4 py-2 text-sm font-medium hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Export the compare table as CSV">
+              Download Compare CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Status + Progress -->
+        <div class="border-t p-4 flex items-center gap-4">
+          <span class="text-xs uppercase tracking-wide font-semibold">Status:</span>
+          <span id="statusBadge"
+                class="text-xs rounded-full px-2 py-1 bg-slate-100 text-slate-700">Ready</span>
+          <div class="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+            <div id="progressBar" class="h-full w-0 bg-indigo-600 transition-[width]"></div>
+          </div>
+          <span id="progressLabel" class="text-xs text-slate-500">0 / 0</span>
+        </div>
+      </div>
+
+      <!-- Video Player Card -->
+      <div class="bg-white rounded-2xl shadow-sm border">
+        <div class="p-4">
+          <video id="video" class="w-full rounded-lg bg-black" controls playsinline></video>
+          <p class="mt-2 text-xs text-slate-500">
+            The player pauses during analysis to capture exact frames. You’ll see thumbnails on the right and can compare lenses in the table.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Results + Debug -->
+    <aside class="space-y-4">
+      <!-- Results Card with Tabs -->
+      <div class="bg-white rounded-2xl shadow-sm border">
+        <div class="p-4 flex items-center justify-between">
+          <h2 class="font-semibold">Transparent Analysis Results</h2>
+          <div class="flex items-center gap-2">
+            <div class="inline-flex rounded-lg border overflow-hidden">
+              <button id="tabStream" class="px-3 py-1 text-xs bg-slate-900 text-white">Stream</button>
+              <button id="tabCompare" class="px-3 py-1 text-xs">Compare</button>
+            </div>
+            <button id="clearResults"
+                    class="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50">Clear</button>
+          </div>
+        </div>
+        <!-- Stream view -->
+        <div id="results" class="p-4 pt-0 space-y-3 scroll-area"></div>
+        <!-- Compare view -->
+        <div id="compareContainer" class="p-4 pt-0 hidden">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-600">Side-by-side analyses for the same frames. Re-analyze with another lens to add columns.</div>
+            <div class="flex items-center gap-2 text-xs">
+              <label class="flex items-center gap-1"><input id="wrapToggle" type="checkbox" class="accent-indigo-600" checked> Wrap text</label>
+              <label class="flex items-center gap-1"><input id="showFictionToggle" type="checkbox" class="accent-indigo-600" checked> Include Fiction</label>
+            </div>
+          </div>
+          <div id="compareTableWrapper" class="scroll-area border rounded-xl">
+            <table id="compareTable" class="min-w-full table-fixed text-sm table-sticky"></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Debug Log Card -->
+      <div class="bg-white rounded-2xl shadow-sm border">
+        <div class="p-4 flex items-center justify-between">
+          <h2 class="font-semibold">Debug Log</h2>
+          <div class="space-x-2">
+            <button id="copyLog"
+              class="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50">Copy</button>
+            <button id="clearLog"
+              class="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50">Clear</button>
+          </div>
+        </div>
+        <ol id="log" class="p-4 pt-0 space-y-1 scroll-area mono text-xs text-slate-700"></ol>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Hidden canvas used for frame capture -->
+  <canvas id="canvas" class="hidden"></canvas>
+
+  <footer class="mx-auto max-w-6xl p-4 text-center text-xs text-slate-500">
+    Built for transparent AI vision analysis. Works fully client-side in your browser.
+  </footer>
+
+  <script>
+    /**************************************************************
+     * Utility: timestamped debug logging + UI helpers
+     **************************************************************/
+    const logEl = document.getElementById('log');
+    function ts() {
+      const d = new Date();
+      return d.toISOString().replace('T', ' ').replace('Z', '');
+    }
+    function log(message, data) {
+      const item = document.createElement('li');
+      item.textContent = `[${ts()}] ${message}`;
+      if (data !== undefined) {
+        const details = document.createElement('pre');
+        details.className = 'whitespace-pre-wrap break-words mono text-[11px] bg-slate-50 border rounded p-2';
+        try {
+          details.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        } catch {
+          details.textContent = String(data);
+        }
+        item.appendChild(details);
+      }
+      logEl.appendChild(item);
+      logEl.scrollTop = logEl.scrollHeight;
+      if (data !== undefined) console.debug(message, data);
+      else console.debug(message);
+    }
+    function setStatus(text, color = 'bg-slate-100 text-slate-700') {
+      const badge = document.getElementById('statusBadge');
+      badge.className = `text-xs rounded-full px-2 py-1 ${color}`;
+      badge.textContent = text;
+    }
+    function setProgress(current, total) {
+      const pct = total > 0 ? (current / total) * 100 : 0;
+      document.getElementById('progressBar').style.width = `${pct}%`;
+      document.getElementById('progressLabel').textContent = `${current} / ${total}`;
+    }
+
+    /**************************************************************
+     * Perspective management
+     **************************************************************/
+    const PERSPECTIVES = {
+      objective: {
+        label: 'Objective Description',
+        prompt: 'Describe what you see in this video frame. Be objective and factual.'
+      },
+      urban: {
+        label: 'Urban Planning Analysis',
+        prompt: 'Analyze this from an urban planning perspective: traffic flow, pedestrian infrastructure, accessibility features, public space design, and urban functionality.'
+      },
+      social: {
+        label: 'Social Dynamics Analysis',
+        prompt: 'Analyze this from a sociological perspective: social interactions, group behavior, community dynamics, cultural patterns, and interpersonal relationships.'
+      },
+      safety: {
+        label: 'Safety Assessment',
+        prompt: 'Analyze this from a safety perspective: identify potential hazards, risk factors, safety compliance issues, and protective measures.'
+      },
+      accessibility: {
+        label: 'Accessibility Review',
+        prompt: 'Analyze this from an accessibility perspective: identify barriers, evaluate inclusive design features, assess mobility challenges, and note universal design elements.'
+      },
+      fiction: {
+        label: 'Creative Fiction (First-Person Story)',
+        prompt: 'Pick one person visible in this frame and create a brief, respectful first-person narrative from their perspective. What might they be thinking or experiencing? Label clearly as creative fiction.'
+      }
+    };
+
+    /**************************************************************
+     * APIManager: handles Gemini REST calls with retry/backoff
+     **************************************************************/
+    class APIManager {
+      constructor(getKeyFn) {
+        this.getKey = getKeyFn;
+        this.model = 'gemini-2.0-flash-exp';
+        this.baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
+        this.currentPerspective = 'objective';
+        this.prompt = PERSPECTIVES[this.currentPerspective].prompt;
+      }
+      setPerspective(key) {
+        if (PERSPECTIVES[key]) {
+          this.currentPerspective = key;
+          this.prompt = PERSPECTIVES[key].prompt;
+          log('Perspective set', { key, label: PERSPECTIVES[key].label });
+        }
+      }
+      getPerspective() { return this.currentPerspective; }
+      async analyzeFrameBase64(pngB64, tryNum = 0) {
+        const apiKey = this.getKey();
+        if (!apiKey) throw new Error('Missing API key. Please paste your Gemini API key.');
+        const body = {
+          contents: [{
+            role: 'user',
+            parts: [ { text: this.prompt }, { inlineData: { mimeType: 'image/png', data: pngB64 } } ]
+          }],
+        };
+        const url = `${this.baseUrl}?key=${encodeURIComponent(apiKey)}`;
+        log('API: sending frame to Gemini', { model: this.model, bytes: pngB64.length, perspective: this.currentPerspective });
+        let res;
+        try {
+          res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        } catch (networkErr) {
+          log('API network error', String(networkErr));
+          throw new Error('Network error calling Gemini. Check connectivity and CORS/browser console.');
+        }
+        if (!res.ok) {
+          const text = await res.text();
+          const status = res.status;
+          log(`API error status ${status}`, text);
+          if ((status === 429 || status >= 500) && tryNum < 3) {
+            const delay = (2 ** tryNum) * 800 + Math.random() * 300;
+            log('Retrying after backoff (ms)', delay.toFixed(0));
+            await new Promise(r => setTimeout(r, delay));
+            return this.analyzeFrameBase64(pngB64, tryNum + 1);
+          }
+          if (status === 401 || status === 403) {
+            throw new Error('Authentication failed. Check that your API key is valid and has access to this model.');
+          }
+          throw new Error(`Gemini API error (${status}): ${text.slice(0, 200)}…`);
+        }
+        const json = await res.json();
+        const text = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n').trim();
+        if (!text) {
+          log('API unexpected response', json);
+          throw new Error('Unexpected API response format — no text found.');
+        }
+        return text;
+      }
+    }
+
+    /**************************************************************
+     * VideoPlayer
+     **************************************************************/
+    class VideoPlayer {
+      constructor(videoEl) {
+        this.video = videoEl;
+        this.url = null;
+        this.loaded = false;
+        this.fileName = '';
+        this._wireEvents();
+      }
+      _wireEvents() {
+        const v = this.video;
+        ['loadedmetadata','loadeddata','play','pause','seeking','seeked','timeupdate','error','ended']
+          .forEach(ev => v.addEventListener(ev, (e) => log(`Video event: ${ev}`, { currentTime: v.currentTime, duration: v.duration })));
+      }
+      loadFile(file) {
+        if (!file || !file.type.startsWith('video/')) {
+          throw new Error('Please select a valid video file.');
+        }
+        if (this.url) URL.revokeObjectURL(this.url);
+        this.url = URL.createObjectURL(file);
+        this.video.src = this.url;
+        this.fileName = file.name || 'unknown_video';
+        this.loaded = false;
+        return new Promise((resolve, reject) => {
+          const onLoaded = () => {
+            this.loaded = true;
+            log('Video loaded', { duration: this.video.duration, name: this.fileName });
+            this.video.play().catch(() => { log('Autoplay blocked; user interaction required to play.'); });
+            this.video.removeEventListener('loadedmetadata', onLoaded);
+            resolve();
+          };
+          const onErr = (e) => { this.video.removeEventListener('loadedmetadata', onLoaded); reject(new Error('Failed to load video.')); };
+          this.video.addEventListener('loadedmetadata', onLoaded, { once: true });
+          this.video.addEventListener('error', onErr, { once: true });
+        });
+      }
+      async pause() { try { this.video.pause(); } catch {} await new Promise(r => requestAnimationFrame(r)); }
+      async safeSeek(timeSec) {
+        const v = this.video;
+        if (!this.loaded) throw new Error('Video not loaded yet.');
+        return new Promise(async (resolve, reject) => {
+          const onSeeked = async () => { v.removeEventListener('seeked', onSeeked); await new Promise(r => requestAnimationFrame(r)); resolve(); };
+          v.addEventListener('seeked', onSeeked, { once: true });
+          try { v.currentTime = Math.min(timeSec, Math.max(0, v.duration || timeSec)); }
+          catch (e) { v.removeEventListener('seeked', onSeeked); reject(e); }
+        });
+      }
+      get duration() { return this.video.duration || 0; }
+      get dimensions() { return { w: this.video.videoWidth || 0, h: this.video.videoHeight || 0 }; }
+    }
+
+    /**************************************************************
+     * FrameAnalyzer: now emits callback for UI updates
+     **************************************************************/
+    class FrameAnalyzer {
+      constructor(videoPlayer, apiManager, options = {}) {
+        this.vp = videoPlayer;
+        this.api = apiManager;
+        this.step = options.step || 5;
+        this.cancelled = false;
+        this.canvas = document.getElementById('canvas');
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        this.resultsEl = document.getElementById('results');
+        // Store captured frames for re-analysis:
+        // { time, dataUrl, b64, analyses: { perspectiveKey: text } }
+        this.frames = [];
+        // Hook for UI updates (stream + compare)
+        this.onAfterFrame = options.onAfterFrame || (() => {});
+      }
+      resetUI() {
+        this.cancelled = false;
+        setStatus('Analyzing', 'bg-indigo-100 text-indigo-700');
+        setProgress(0, 0);
+        this.resultsEl.innerHTML = '';
+        this.frames = [];
+        this.onAfterFrame('reset');
+      }
+      cancel() { this.cancelled = true; }
+      _appendResult({ time, dataUrl, text, perspectiveKey }) {
+        const row = document.createElement('div');
+        row.className = 'flex gap-3 p-2 rounded-xl border bg-white';
+        const img = document.createElement('img');
+        img.src = dataUrl; img.alt = `Frame at ${time.toFixed(2)}s`; img.width = 140; img.height = 80; img.className = 'thumb rounded-lg border';
+        const meta = document.createElement('div'); meta.className = 'flex-1';
+        const headerLine = document.createElement('div'); headerLine.className = 'flex items-center gap-2 flex-wrap';
+        const tBadge = document.createElement('span'); tBadge.className = 'text-xs font-semibold text-slate-600'; tBadge.textContent = `t = ${time.toFixed(2)}s`;
+        const pBadge = document.createElement('span'); pBadge.className = 'text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border';
+        const label = PERSPECTIVES[perspectiveKey]?.label || 'Objective Description';
+        pBadge.textContent = label; if (perspectiveKey === 'fiction') { pBadge.classList.add('border-rose-300','text-rose-700','bg-rose-50'); } else { pBadge.classList.add('border-slate-200','text-slate-600','bg-slate-50'); }
+        headerLine.appendChild(tBadge); headerLine.appendChild(pBadge);
+        const p = document.createElement('p'); p.className = 'text-sm leading-snug'; p.textContent = (perspectiveKey === 'fiction') ? `Creative Fiction — ${text}` : text;
+        meta.appendChild(headerLine); meta.appendChild(p);
+        row.appendChild(img); row.appendChild(meta);
+        this.resultsEl.appendChild(row);
+        this.resultsEl.scrollTop = this.resultsEl.scrollHeight;
+      }
+      captureFrameBase64() {
+        const { w, h } = this.vp.dimensions; if (!w || !h) throw new Error('Video dimensions not available yet.');
+        this.canvas.width = w; this.canvas.height = h; this.ctx.drawImage(this.vp.video, 0, 0, w, h);
+        const dataUrl = this.canvas.toDataURL('image/png'); const b64 = dataUrl.split(',')[1]; return { b64, dataUrl };
+      }
+      async runSequential(stepSec) {
+        this.step = Math.max(1, Math.floor(stepSec || this.step));
+        await this.vp.pause();
+        const duration = this.vp.duration || 0; if (!Number.isFinite(duration) || duration <= 0) { throw new Error('Invalid video duration.'); }
+        const times = []; for (let t = 0; t <= duration + 0.0001; t += this.step) { times.push(Math.min(t, duration)); }
+        for (let i = times.length - 2; i >= 0; i--) { if (Math.abs(times[i] - times[i + 1]) < 1e-6) times.splice(i, 1); }
+        log('Analysis plan', { step: this.step, frames: times.length, duration }); setProgress(0, times.length);
+        const perspectiveKey = this.api.getPerspective(); let done = 0;
+        for (const t of times) {
+          if (this.cancelled) { setStatus('Cancelled', 'bg-amber-100 text-amber-700'); log('Analysis cancelled by user.'); break; }
+          setStatus(`Seeking t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700'); await this.vp.safeSeek(t);
+          let dataUrl, b64; try { const c = this.captureFrameBase64(); b64 = c.b64; dataUrl = c.dataUrl; log('Captured frame', { time: t, width: this.vp.dimensions.w, height: this.vp.dimensions.h, sizeB64: b64.length }); } 
+          catch (e) { log('Capture error', String(e)); this._appendResult({ time: t, dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', text: `Capture error: ${e.message}`, perspectiveKey }); done++; setProgress(done, times.length); continue; }
+          setStatus(`Analyzing t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700');
+          let text; try { text = await this.api.analyzeFrameBase64(b64); log('API response received', text); }
+          catch (e) { log('API failure', String(e)); text = `API error: ${e.message}`; }
+          const frame = { time: t, dataUrl, b64, analyses: { [perspectiveKey]: text } };
+          this.frames.push(frame);
+          this._appendResult({ time: t, dataUrl, text, perspectiveKey });
+          this.onAfterFrame('analyzed', frame);
+          done++; setProgress(done, times.length);
+        }
+        if (!this.cancelled) { setStatus('Complete', 'bg-emerald-100 text-emerald-700'); log('Analysis complete.'); }
+      }
+      async reanalyzeWithCurrentPerspective() {
+        const perspectiveKey = this.api.getPerspective();
+        if (!this.frames.length) { alert('No captured frames available. Run Analyze Video first.'); return; }
+        setStatus('Re-analyzing', 'bg-indigo-100 text-indigo-700');
+        // Rebuild the stream view for this lens (compare view keeps all lenses via cache)
+        this.resultsEl.innerHTML = '';
+        setProgress(0, this.frames.length);
+        let done = 0;
+        for (const frame of this.frames) {
+          let text = frame.analyses?.[perspectiveKey];
+          if (!text) {
+            try {
+              text = await this.api.analyzeFrameBase64(frame.b64);
+              frame.analyses = frame.analyses || {}; frame.analyses[perspectiveKey] = text;
+              log('Re-analysis API response', { time: frame.time, perspectiveKey, preview: text.slice(0, 120) + (text.length > 120 ? '…' : '') });
+            } catch (e) {
+              text = `API error: ${e.message}`; frame.analyses[perspectiveKey] = text; log('Re-analysis API failure', { time: frame.time, error: String(e) });
+            }
+          } else {
+            log('Using cached analysis', { time: frame.time, perspectiveKey });
+          }
+          this._appendResult({ time: frame.time, dataUrl: frame.dataUrl, text, perspectiveKey });
+          this.onAfterFrame('reanalyzed', frame);
+          done++; setProgress(done, this.frames.length);
+        }
+        setStatus('Complete', 'bg-emerald-100 text-emerald-700'); log('Re-analysis complete.', { perspectiveKey });
+      }
+      /** Generate text report of the current perspective */
+      buildReport(perspectiveKey, meta = {}) {
+        const now = new Date();
+        const header = [
+          'AI Frame Analyzer — Downloaded Analysis',
+          `Timestamp: ${now.toISOString()}`,
+          `Video file: ${meta.fileName || 'unknown_video'}`,
+          `Perspective: ${PERSPECTIVES[perspectiveKey]?.label || perspectiveKey}`,
+          `Total frames: ${this.frames.length}`,
+          ''
+        ].join('\n');
+        const body = this.frames.map((f, idx) => {
+          const txt = f.analyses?.[perspectiveKey] ?? '(no analysis cached for this perspective — run re-analysis)';
+          const label = (perspectiveKey === 'fiction') ? 'Creative Fiction — ' : '';
+          return [`Frame ${idx + 1} — t=${f.time.toFixed(2)}s`, `${label}${txt}`, ''].join('\n');
+        }).join('\n');
+        return header + body;
+      }
+    }
+
+    /**************************************************************
+     * Compare table rendering + CSV export
+     **************************************************************/
+    const compareTable = document.getElementById('compareTable');
+    const compareWrapper = document.getElementById('compareTableWrapper');
+    const wrapToggle = document.getElementById('wrapToggle');
+    const showFictionToggle = document.getElementById('showFictionToggle');
+
+    function perspectiveSort(a, b) {
+      const order = ['objective','urban','social','safety','accessibility','fiction'];
+      return order.indexOf(a) - order.indexOf(b);
+    }
+
+    function getActivePerspectiveKeys(frames, includeFiction = true) {
+      const keys = new Set();
+      for (const f of frames) {
+        for (const k of Object.keys(f.analyses || {})) {
+          if (!includeFiction && k === 'fiction') continue;
+          keys.add(k);
+        }
+      }
+      return Array.from(keys).sort(perspectiveSort);
+    }
+
+    function renderCompareTable(frames) {
+      compareTable.innerHTML = '';
+      if (!frames.length) {
+        compareTable.innerHTML = '<thead><tr><th class="text-left p-2 text-slate-500">No data yet — run an analysis.</th></tr></thead>';
+        return;
+      }
+      const includeFiction = showFictionToggle.checked;
+      const cols = getActivePerspectiveKeys(frames, includeFiction);
+      // Header
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      const baseHeads = ['#','Time','Thumb'];
+      for (const h of baseHeads) {
+        const th = document.createElement('th'); th.className = 'p-2 text-left text-xs uppercase tracking-wide text-slate-500 border-b'; th.textContent = h; hr.appendChild(th);
+      }
+      for (const key of cols) {
+        const th = document.createElement('th'); th.className = 'p-2 text-left text-xs uppercase tracking-wide text-slate-500 border-b'; th.textContent = PERSPECTIVES[key]?.label || key; hr.appendChild(th);
+      }
+      thead.appendChild(hr); compareTable.appendChild(thead);
+      // Body
+      const tbody = document.createElement('tbody');
+      frames.forEach((f, idx) => {
+        const tr = document.createElement('tr');
+        const tdIndex = document.createElement('td'); tdIndex.className = 'align-top p-2 text-slate-500 text-xs border-b'; tdIndex.textContent = String(idx + 1); tr.appendChild(tdIndex);
+        const tdTime = document.createElement('td'); tdTime.className = 'align-top p-2 text-slate-700 text-xs border-b'; tdTime.textContent = `${f.time.toFixed(2)}s`; tr.appendChild(tdTime);
+        const tdThumb = document.createElement('td'); tdThumb.className = 'align-top p-2 border-b'; tdThumb.innerHTML = `<img src="${f.dataUrl}" alt="t=${f.time.toFixed(2)}s" class="thumb rounded border"/>`; tr.appendChild(tdThumb);
+        for (const key of cols) {
+          const td = document.createElement('td'); td.className = 'align-top p-2 border-b';
+          const text = f.analyses?.[key] || '';
+          const isFic = key === 'fiction' && text;
+          const wrapClass = wrapToggle.checked ? 'whitespace-normal' : 'whitespace-nowrap overflow-x-auto block max-w-[28rem]';
+          td.innerHTML = `<div class="text-sm ${wrapClass} ${isFic ? 'text-rose-700' : 'text-slate-800'}">${isFic ? 'Creative Fiction — ' : ''}${escapeHtml(text)}</div>`;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      });
+      compareTable.appendChild(tbody);
+    }
+
+    function escapeHtml(str) { return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s])); }
+
+    function exportCompareCsv(frames) {
+      if (!frames.length) { alert('No data to export yet.'); return; }
+      const includeFiction = showFictionToggle.checked;
+      const cols = getActivePerspectiveKeys(frames, includeFiction);
+      const headers = ['index','time_s','thumbnail_dataurl', ...cols.map(k => (PERSPECTIVES[k]?.label || k).replace(/[,\n]/g,' '))];
+      const rows = [headers.join(',')];
+      frames.forEach((f, i) => {
+        const values = [i+1, f.time.toFixed(2), f.dataUrl];
+        for (const k of cols) { values.push((f.analyses?.[k] || '').replaceAll('\n',' ').replaceAll('"','""')); }
+        const csvLine = values.map(v => `"${String(v)}"`).join(',');
+        rows.push(csvLine);
+      });
+      const csv = rows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'analysis_compare.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      log('Compare CSV generated', { rows: frames.length });
+    }
+
+    /**************************************************************
+     * Wire up UI + instantiate classes
+     **************************************************************/
+    const videoEl = document.getElementById('video');
+    const fileInput = document.getElementById('videoFile');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const reanalyzeBtn = document.getElementById('reanalyzeBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const stepInput = document.getElementById('stepSeconds');
+    const apiKeyInput = document.getElementById('apiKey');
+    const perspectiveSelect = document.getElementById('perspectiveSelect');
+    const clearResultsBtn = document.getElementById('clearResults');
+    const clearLogBtn = document.getElementById('clearLog');
+    const copyLogBtn = document.getElementById('copyLog');
+    const resultsEl = document.getElementById('results');
+    const tabStreamBtn = document.getElementById('tabStream');
+    const tabCompareBtn = document.getElementById('tabCompare');
+    const compareContainer = document.getElementById('compareContainer');
+
+    const vp = new VideoPlayer(videoEl);
+    const api = new APIManager(() => apiKeyInput.value.trim() || '');
+
+    function onAfterFrame() { renderCompareTable(analyzer.frames); }
+
+    let analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5, onAfterFrame });
+
+    function setWorking(isWorking) {
+      analyzeBtn.disabled = isWorking;
+      cancelBtn.classList.toggle('hidden', !isWorking);
+      reanalyzeBtn.disabled = isWorking;
+      downloadBtn.disabled = isWorking;
+      downloadCsvBtn.disabled = isWorking;
+    }
+
+    // Tabs
+    function activateTab(which) {
+      const isStream = which === 'stream';
+      resultsEl.classList.toggle('hidden', !isStream);
+      compareContainer.classList.toggle('hidden', isStream);
+      tabStreamBtn.classList.toggle('bg-slate-900', isStream);
+      tabStreamBtn.classList.toggle('text-white', isStream);
+      tabCompareBtn.classList.toggle('bg-slate-900', !isStream);
+      tabCompareBtn.classList.toggle('text-white', !isStream);
+      if (!isStream) renderCompareTable(analyzer.frames);
+    }
+    tabStreamBtn.addEventListener('click', () => activateTab('stream'));
+    tabCompareBtn.addEventListener('click', () => activateTab('compare'));
+    activateTab('stream');
+
+    // Load file
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      try { await vp.loadFile(file); setStatus('Ready', 'bg-slate-100 text-slate-700'); }
+      catch (err) { log('File load error', String(err)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(err.message); }
+    });
+
+    // Perspective changes
+    perspectiveSelect.addEventListener('change', (e) => {
+      const key = e.target.value; api.setPerspective(key); log('Perspective changed via UI', { key, label: PERSPECTIVES[key]?.label });
+    });
+    api.setPerspective(perspectiveSelect.value);
+
+    // Analyze button
+    analyzeBtn.addEventListener('click', async () => {
+      if (!vp.loaded) { alert('Please upload a video first.'); return; }
+      if (!apiKeyInput.value.trim()) { alert('Please paste your Gemini API key.'); return; }
+      setWorking(true);
+      resultsEl.innerHTML = '';
+      analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5, onAfterFrame });
+      analyzer.resetUI();
+      try { await analyzer.runSequential(Number(stepInput.value) || 5); }
+      catch (e) { log('Fatal analysis error', String(e)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(`Analysis failed: ${e.message}`); }
+      finally { setWorking(false); renderCompareTable(analyzer.frames); }
+    });
+
+    // Cancel
+    cancelBtn.addEventListener('click', () => { analyzer.cancel(); cancelBtn.classList.add('hidden'); analyzeBtn.disabled = false; });
+
+    // Re-analyze
+    reanalyzeBtn.addEventListener('click', async () => {
+      if (!apiKeyInput.value.trim()) { alert('Please paste your Gemini API key.'); return; }
+      setWorking(true);
+      try { await analyzer.reanalyzeWithCurrentPerspective(); }
+      catch (e) { log('Re-analysis error', String(e)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(`Re-analysis failed: ${e.message}`); }
+      finally { setWorking(false); renderCompareTable(analyzer.frames); }
+    });
+
+    // Download analysis as text (current perspective)
+    downloadBtn.addEventListener('click', () => {
+      const perspectiveKey = api.getPerspective();
+      if (!analyzer.frames.length) { alert('No analysis to export yet.'); return; }
+      const report = analyzer.buildReport(perspectiveKey, { fileName: vp.fileName });
+      const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (vp.fileName || 'video').replace(/[^\w.-]+/g, '_');
+      const label = (PERSPECTIVES[perspectiveKey]?.label || perspectiveKey).replace(/[^\w.-]+/g, '_');
+      a.href = url; a.download = `analysis_${safeName}_${label}.txt`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      log('Download generated', { fileName: a.download, bytes: report.length });
+    });
+
+    // Download compare CSV
+    downloadCsvBtn.addEventListener('click', () => exportCompareCsv(analyzer.frames));
+
+    // Compare controls
+    wrapToggle.addEventListener('change', () => renderCompareTable(analyzer.frames));
+    showFictionToggle.addEventListener('change', () => renderCompareTable(analyzer.frames));
+
+    // Clear results (stream view only — keeps frames for compare/exports)
+    clearResultsBtn.addEventListener('click', () => {
+      resultsEl.innerHTML = '<p class="text-sm text-slate-500">No analysis yet. Thumbnails and frame descriptions will appear here.</p>';
+      log('Results (stream) cleared. Frames retained for comparison.');
+    });
+
+    // Log utilities
+    clearLogBtn.addEventListener('click', () => { logEl.innerHTML = ''; log('Log cleared.'); });
+    copyLogBtn.addEventListener('click', async () => {
+      const texts = [...logEl.querySelectorAll('li')].map(li => li.innerText);
+      const joined = texts.join('\n');
+      try { await navigator.clipboard.writeText(joined); log('Log copied to clipboard.'); }
+      catch { prompt('Copy the log below:', joined); }
+    });
+
+    // Initial state
+    document.getElementById('results').innerHTML = '<p class="text-sm text-slate-500">No analysis yet. Thumbnails and frame descriptions will appear here.</p>';
+    log('App initialized. Awaiting video and API key.');
+  </script>
+</body>
+</html>
