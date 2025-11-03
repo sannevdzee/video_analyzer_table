@@ -1,8 +1,9 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>AI Video Analyzer - Sanne van der Zee</title>
+  <title>AI Frame Analyzer — Continuous, Context-Aware Video Insight</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -15,16 +16,34 @@
     /* Subtle focus ring for keyboard users */
     :focus-visible { outline: 2px solid rgb(59 130 246); outline-offset: 2px; }
 
-    /* Compare table tweaks */
-    .table-sticky thead th { position: sticky; top: 0; background: white; z-index: 1; }
-    .truncate-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    /* Continuity UI flourishes */
+    .frame-row { position: relative; }
+    .frame-row::before {
+      content: "";
+      position: absolute;
+      left: 160px; /* just right of thumbnail */
+      top: -6px;
+      bottom: -6px;
+      width: 2px;
+      background: linear-gradient(to bottom, rgba(148,163,184,.4), rgba(148,163,184,.15));
+      pointer-events: none;
+    }
+    .frame-row:first-child::before { display: none; }
+    .key-moment { box-shadow: 0 0 0 2px rgba(16,185,129,.5) inset; }
+    .static-group { background: #f8fafc; }
+    .badge { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+    .change-dot { width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
+    .change-low { background: #cbd5e1; }
+    .change-med { background: #f59e0b; }
+    .change-high { background: #10b981; }
+    .collapsed .collapsible { display: none; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
   <header class="border-b bg-white/80 backdrop-blur sticky top-0 z-10">
     <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
       <h1 class="text-xl sm:text-2xl font-semibold">AI-Powered Frame Analysis</h1>
-      <span id="version" class="text-xs text-slate-500">v1.2 · Comparative Table</span>
+      <span id="version" class="text-xs text-slate-500">v2.0 · Continuous Mode <!-- GENERATED_BY: PROMPT4.1_CONTINUOUS --></span>
     </div>
   </header>
 
@@ -49,12 +68,13 @@
           </div>
 
           <div class="space-y-2">
-            <label for="stepSeconds" class="block text-sm font-medium">Step size (seconds)</label>
+            <label for="stepSeconds" class="block text-sm font-medium">Base step size (seconds)</label>
             <input id="stepSeconds" type="number" min="1" step="1" value="5"
                    class="w-32 rounded-lg border px-3 py-2 text-sm" />
+            <p class="text-xs text-slate-500">Adaptive sampling will increase/decrease this automatically.</p>
           </div>
 
-          <!-- Perspective Selector -->
+          <!-- New: Perspective Selector (mobile-friendly) -->
           <div class="space-y-2">
             <label for="perspectiveSelect" class="block text-sm font-medium">Analysis perspective</label>
             <select id="perspectiveSelect" class="w-full rounded-lg border px-3 py-2 text-sm">
@@ -65,7 +85,31 @@
               <option value="accessibility">Accessibility Review</option>
               <option value="fiction">Creative Fiction (First-Person Story)</option>
             </select>
-            <p class="text-xs text-slate-500">Change this and re-analyze — previous lenses remain for side-by-side comparison.</p>
+            <p class="text-xs text-slate-500">You can change this later and re-analyze already captured frames.</p>
+          </div>
+
+          <!-- Mode + Options -->
+          <div class="space-y-2 sm:col-span-2">
+            <label class="block text-sm font-medium">Analysis mode</label>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="mode" value="continuous" checked class="rounded border" />
+                Continuous Analysis
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="mode" value="isolated" class="rounded border" />
+                Isolated Frames (legacy)
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm ml-4">
+                <input id="skipSimilar" type="checkbox" checked class="rounded border" />
+                Skip Similar Frames
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input id="highlightsOnly" type="checkbox" class="rounded border" />
+                Export Highlights Only
+              </label>
+            </div>
+            <p class="text-xs text-slate-500">Continuous mode maintains a rolling context across frames and produces a flowing narrative.</p>
           </div>
 
           <div class="flex items-end justify-start gap-2 sm:col-span-2 flex-wrap">
@@ -78,21 +122,16 @@
               Cancel
             </button>
 
+            <!-- New: Re-Analyze + Download -->
             <button id="reanalyzeBtn"
-              class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Re-process captured frames with the selected perspective">
+              class="inline-flex items-center justify-center rounded-xl bg-amber-600 text-white px-4 py-2 text-sm font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Re-process previously captured frames with the selected perspective">
               Re-analyze with New Perspective
             </button>
             <button id="downloadBtn"
-              class="inline-flex items-center justify-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Download a text report of the current analysis">
               Download Analysis
-            </button>
-            <!-- New: Download Compare CSV -->
-            <button id="downloadCsvBtn"
-              class="inline-flex items-center justify-center rounded-xl bg-slate-800 text-white px-4 py-2 text-sm font-medium hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Export the compare table as CSV">
-              Download Compare CSV
             </button>
           </div>
         </div>
@@ -114,7 +153,7 @@
         <div class="p-4">
           <video id="video" class="w-full rounded-lg bg-black" controls playsinline></video>
           <p class="mt-2 text-xs text-slate-500">
-            The player pauses during analysis to capture exact frames. You’ll see thumbnails on the right and can compare lenses in the table.
+            The player pauses during analysis to capture exact frames. You’ll see thumbnails and AI descriptions appear on the right.
           </p>
         </div>
       </div>
@@ -122,33 +161,26 @@
 
     <!-- RIGHT: Results + Debug -->
     <aside class="space-y-4">
-      <!-- Results Card with Tabs -->
+      <!-- Cumulative Narrative Summary -->
+      <div class="bg-white rounded-2xl shadow-sm border">
+        <div class="p-4 flex items-center justify-between">
+          <h2 class="font-semibold">Cumulative Narrative Summary</h2>
+          <span class="badge px-2 py-1 rounded-full border bg-slate-50 text-slate-600">Auto-updating</span>
+        </div>
+        <div id="summary" class="p-4 pt-0 text-sm text-slate-700">
+          <p class="text-slate-500">No summary yet. Start an analysis to build a flowing narrative.</p>
+        </div>
+      </div>
+
+      <!-- Results Card -->
       <div class="bg-white rounded-2xl shadow-sm border">
         <div class="p-4 flex items-center justify-between">
           <h2 class="font-semibold">Transparent Analysis Results</h2>
-          <div class="flex items-center gap-2">
-            <div class="inline-flex rounded-lg border overflow-hidden">
-              <button id="tabStream" class="px-3 py-1 text-xs bg-slate-900 text-white">Stream</button>
-              <button id="tabCompare" class="px-3 py-1 text-xs">Compare</button>
-            </div>
-            <button id="clearResults"
-                    class="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50">Clear</button>
-          </div>
+          <button id="clearResults"
+                  class="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50">Clear</button>
         </div>
-        <!-- Stream view -->
-        <div id="results" class="p-4 pt-0 space-y-3 scroll-area"></div>
-        <!-- Compare view -->
-        <div id="compareContainer" class="p-4 pt-0 hidden">
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-xs text-slate-600">Side-by-side analyses for the same frames. Re-analyze with another lens to add columns.</div>
-            <div class="flex items-center gap-2 text-xs">
-              <label class="flex items-center gap-1"><input id="wrapToggle" type="checkbox" class="accent-indigo-600" checked> Wrap text</label>
-              <label class="flex items-center gap-1"><input id="showFictionToggle" type="checkbox" class="accent-indigo-600" checked> Include Fiction</label>
-            </div>
-          </div>
-          <div id="compareTableWrapper" class="scroll-area border rounded-xl">
-            <table id="compareTable" class="min-w-full table-fixed text-sm table-sticky"></table>
-          </div>
+        <div id="results" class="p-4 pt-0 space-y-3 scroll-area">
+          <p class="text-sm text-slate-500">No analysis yet. Thumbnails and frame descriptions will appear here.</p>
         </div>
       </div>
 
@@ -214,37 +246,45 @@
     }
 
     /**************************************************************
-     * Perspective management
+     * Perspective management + Continuity Prompts
      **************************************************************/
     const PERSPECTIVES = {
       objective: {
         label: 'Objective Description',
-        prompt: 'Describe what you see in this video frame. Be objective and factual.'
+        first: 'Describe this initial video frame objectively.',
+        subsequent: (ctx) => `Given the previous context: ${ctx}\nDescribe what has CHANGED or PROGRESSED in this frame. Focus on new elements, movements, or transitions.`
       },
       urban: {
         label: 'Urban Planning Analysis',
-        prompt: 'Analyze this from an urban planning perspective: traffic flow, pedestrian infrastructure, accessibility features, public space design, and urban functionality.'
+        first: 'Analyze this initial frame from an urban planning perspective.',
+        subsequent: (ctx) => `Continuing the urban analysis from: ${ctx}\nHow has the urban environment or usage pattern evolved in this frame?`
       },
       social: {
         label: 'Social Dynamics Analysis',
-        prompt: 'Analyze this from a sociological perspective: social interactions, group behavior, community dynamics, cultural patterns, and interpersonal relationships.'
+        first: 'Analyze the initial social dynamics in this frame.',
+        subsequent: (ctx) => `Building on previous observations: ${ctx}\nDescribe how social interactions have developed or changed.`
       },
       safety: {
         label: 'Safety Assessment',
-        prompt: 'Analyze this from a safety perspective: identify potential hazards, risk factors, safety compliance issues, and protective measures.'
+        first: 'Identify initial safety considerations in this frame.',
+        subsequent: (ctx) => `Given previous safety observations: ${ctx}\nNote any NEW hazards or changes in risk levels.`
       },
       accessibility: {
         label: 'Accessibility Review',
-        prompt: 'Analyze this from an accessibility perspective: identify barriers, evaluate inclusive design features, assess mobility challenges, and note universal design elements.'
+        first: 'Assess initial accessibility features and barriers.',
+        subsequent: (ctx) => `Continuing from: ${ctx}\nIdentify any changes in accessibility or new barriers encountered.`
       },
       fiction: {
         label: 'Creative Fiction (First-Person Story)',
-        prompt: 'Pick one person visible in this frame and create a brief, respectful first-person narrative from their perspective. What might they be thinking or experiencing? Label clearly as creative fiction.'
+        first: 'Begin a first-person narrative from someone in this frame. Keep it respectful and clearly labeled as fiction.',
+        subsequent: (prevNarrative) => `Continue the story from: ${prevNarrative}\nAdvance the narrative based on what happens in this new frame. Keep it concise and evocative.`
       }
     };
 
     /**************************************************************
      * APIManager: handles Gemini REST calls with retry/backoff
+     * - Uses generateContent with inline image (PNG base64)
+     * - Adds analyzeFrameWithContext to inject rolling context prompts
      **************************************************************/
     class APIManager {
       constructor(getKeyFn) {
@@ -252,26 +292,30 @@
         this.model = 'gemini-2.0-flash-exp';
         this.baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
         this.currentPerspective = 'objective';
-        this.prompt = PERSPECTIVES[this.currentPerspective].prompt;
       }
+
       setPerspective(key) {
         if (PERSPECTIVES[key]) {
           this.currentPerspective = key;
-          this.prompt = PERSPECTIVES[key].prompt;
           log('Perspective set', { key, label: PERSPECTIVES[key].label });
         }
       }
       getPerspective() { return this.currentPerspective; }
-      async analyzeFrameBase64(pngB64, tryNum = 0) {
+
+      async _callGemini({ pngB64, prompt }, tryNum = 0) {
         const apiKey = this.getKey();
         if (!apiKey) throw new Error('Missing API key. Please paste your Gemini API key.');
         const body = {
           contents: [{
-            role: 'user',
-            parts: [ { text: this.prompt }, { inlineData: { mimeType: 'image/png', data: pngB64 } } ]
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: "image/png", data: pngB64 } }
+            ]
           }],
         };
         const url = `${this.baseUrl}?key=${encodeURIComponent(apiKey)}`;
+
         log('API: sending frame to Gemini', { model: this.model, bytes: pngB64.length, perspective: this.currentPerspective });
         let res;
         try {
@@ -280,21 +324,23 @@
           log('API network error', String(networkErr));
           throw new Error('Network error calling Gemini. Check connectivity and CORS/browser console.');
         }
+
         if (!res.ok) {
           const text = await res.text();
           const status = res.status;
           log(`API error status ${status}`, text);
           if ((status === 429 || status >= 500) && tryNum < 3) {
             const delay = (2 ** tryNum) * 800 + Math.random() * 300;
-            log('Retrying after backoff (ms)', delay.toFixed(0));
+            log(`Retrying after backoff (ms)`, delay.toFixed(0));
             await new Promise(r => setTimeout(r, delay));
-            return this.analyzeFrameBase64(pngB64, tryNum + 1);
+            return this._callGemini({ pngB64, prompt }, tryNum + 1);
           }
           if (status === 401 || status === 403) {
             throw new Error('Authentication failed. Check that your API key is valid and has access to this model.');
           }
           throw new Error(`Gemini API error (${status}): ${text.slice(0, 200)}…`);
         }
+
         const json = await res.json();
         const text = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n').trim();
         if (!text) {
@@ -303,10 +349,39 @@
         }
         return text;
       }
+
+      /**
+       * analyzeFrameWithContext
+       * - Implements REQUIRED ENHANCEMENT #8
+       * - First frame: uses "first" prompt for the selected perspective
+       * - Subsequent: concisely includes the last 2 descriptions (or last narrative for fiction)
+       */
+      async analyzeFrameWithContext({ base64Image, frameIndex, perspectiveKey, previousContext, cumulativeNarrative }) {
+        const p = PERSPECTIVES[perspectiveKey];
+        let prompt;
+        if (frameIndex === 0) {
+          prompt = p.first;
+        } else {
+          // Token-aware concise context: include only last 2 items.
+          const ctxSlice = (previousContext || []).slice(-2);
+          const compact = ctxSlice.map((s, i) => `(${i === 0 ? 'prev-2' : 'prev-1'}) ${s}`).join('\n');
+          if (perspectiveKey === 'fiction') {
+            const prevNarr = cumulativeNarrative?.slice(-800) || compact; // keep fiction story continuity
+            prompt = p.subsequent(prevNarr);
+          } else {
+            prompt = p.subsequent(compact);
+          }
+          // Add a small footer to bias towards change tracking and brevity
+          prompt += `
+
+Focus on changes, progressions, and new developments rather than repeating static elements. Keep it under 80 words.`;
+        }
+        return this._callGemini({ pngB64: base64Image, prompt });
+      }
     }
 
     /**************************************************************
-     * VideoPlayer
+     * VideoPlayer: encapsulates file loading, events, safe seeking
      **************************************************************/
     class VideoPlayer {
       constructor(videoEl) {
@@ -316,11 +391,15 @@
         this.fileName = '';
         this._wireEvents();
       }
+
       _wireEvents() {
         const v = this.video;
         ['loadedmetadata','loadeddata','play','pause','seeking','seeked','timeupdate','error','ended']
-          .forEach(ev => v.addEventListener(ev, (e) => log(`Video event: ${ev}`, { currentTime: v.currentTime, duration: v.duration })));
+          .forEach(ev => v.addEventListener(ev, (e) => log(`Video event: ${ev}`, {
+            currentTime: v.currentTime, duration: v.duration
+          })));
       }
+
       loadFile(file) {
         if (!file || !file.type.startsWith('video/')) {
           throw new Error('Please select a valid video file.');
@@ -330,238 +409,552 @@
         this.video.src = this.url;
         this.fileName = file.name || 'unknown_video';
         this.loaded = false;
+
         return new Promise((resolve, reject) => {
           const onLoaded = () => {
             this.loaded = true;
             log('Video loaded', { duration: this.video.duration, name: this.fileName });
-            this.video.play().catch(() => { log('Autoplay blocked; user interaction required to play.'); });
+            this.video.play().catch(() => {
+              log('Autoplay blocked; user interaction required to play.');
+            });
             this.video.removeEventListener('loadedmetadata', onLoaded);
             resolve();
           };
-          const onErr = (e) => { this.video.removeEventListener('loadedmetadata', onLoaded); reject(new Error('Failed to load video.')); };
+          const onErr = (e) => {
+            this.video.removeEventListener('loadedmetadata', onLoaded);
+            reject(new Error('Failed to load video.'));
+          };
           this.video.addEventListener('loadedmetadata', onLoaded, { once: true });
           this.video.addEventListener('error', onErr, { once: true });
         });
       }
-      async pause() { try { this.video.pause(); } catch {} await new Promise(r => requestAnimationFrame(r)); }
+
+      async pause() {
+        try { this.video.pause(); } catch {}
+        await new Promise(r => requestAnimationFrame(r));
+      }
+
       async safeSeek(timeSec) {
         const v = this.video;
         if (!this.loaded) throw new Error('Video not loaded yet.');
         return new Promise(async (resolve, reject) => {
-          const onSeeked = async () => { v.removeEventListener('seeked', onSeeked); await new Promise(r => requestAnimationFrame(r)); resolve(); };
+          const onSeeked = async () => {
+            v.removeEventListener('seeked', onSeeked);
+            await new Promise(r => requestAnimationFrame(r));
+            resolve();
+          };
           v.addEventListener('seeked', onSeeked, { once: true });
-          try { v.currentTime = Math.min(timeSec, Math.max(0, v.duration || timeSec)); }
-          catch (e) { v.removeEventListener('seeked', onSeeked); reject(e); }
+          try {
+            v.currentTime = Math.min(timeSec, Math.max(0, v.duration || timeSec));
+          } catch (e) {
+            v.removeEventListener('seeked', onSeeked);
+            reject(e);
+          }
         });
       }
+
       get duration() { return this.video.duration || 0; }
       get dimensions() { return { w: this.video.videoWidth || 0, h: this.video.videoHeight || 0 }; }
     }
 
     /**************************************************************
-     * FrameAnalyzer: now emits callback for UI updates
+     * FrameAnalyzer: orchestrates capture → API → display, sequential
+     * - Implements CONTINUOUS ANALYSIS SYSTEM (1–10)
      **************************************************************/
     class FrameAnalyzer {
       constructor(videoPlayer, apiManager, options = {}) {
         this.vp = videoPlayer;
         this.api = apiManager;
-        this.step = options.step || 5;
+        this.baseStep = options.step || 5;
         this.cancelled = false;
         this.canvas = document.getElementById('canvas');
         this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
         this.resultsEl = document.getElementById('results');
+        this.summaryEl = document.getElementById('summary');
+
         // Store captured frames for re-analysis:
-        // { time, dataUrl, b64, analyses: { perspectiveKey: text } }
+        // { time, dataUrl, b64, change: {density, score}, analyses: { perspectiveKey: { isolated, continuous } } }
         this.frames = [];
-        // Hook for UI updates (stream + compare)
-        this.onAfterFrame = options.onAfterFrame || (() => {});
+
+        // ===== AnalysisState (REQUIREMENT #4) =====
+        this.analysisState = {
+          frameCount: 0,
+          previousDescriptions: [], // rolling window of last 3 (per perspective/mode)
+          cumulativeNarrative: "", // building story/analysis (per perspective)
+          significantEvents: [],   // key moments detected
+          staticSceneCount: 0,     // consecutive static frames
+          lastChangeScore: 0,      // for adaptive step
+          mode: 'continuous',      // 'continuous' | 'isolated'
+          perspectiveKey: 'objective'
+        };
+
+        // Options
+        this.skipSimilar = true;
+        this.highlightsOnly = false;
+
+        // Motion helpers
+        this._prevImageData = null;
       }
+
       resetUI() {
         this.cancelled = false;
         setStatus('Analyzing', 'bg-indigo-100 text-indigo-700');
         setProgress(0, 0);
         this.resultsEl.innerHTML = '';
+        this.summaryEl.innerHTML = '<p class="text-slate-500">Building summary…</p>';
         this.frames = [];
-        this.onAfterFrame('reset');
+        this.analysisState.frameCount = 0;
+        this.analysisState.previousDescriptions = [];
+        this.analysisState.cumulativeNarrative = "";
+        this.analysisState.significantEvents = [];
+        this.analysisState.staticSceneCount = 0;
+        this.analysisState.lastChangeScore = 0;
       }
+
       cancel() { this.cancelled = true; }
-      _appendResult({ time, dataUrl, text, perspectiveKey }) {
+
+      /********************** Display helpers **********************/
+      _appendResult({ index, time, dataUrl, text, perspectiveKey, changeScore, changeBand, isKeyMoment, grouped, mode }) {
         const row = document.createElement('div');
-        row.className = 'flex gap-3 p-2 rounded-xl border bg-white';
+        row.className = `frame-row flex gap-3 p-2 rounded-xl border bg-white ${isKeyMoment ? 'key-moment' : ''} ${grouped ? 'static-group' : ''}`;
+
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'relative';
         const img = document.createElement('img');
-        img.src = dataUrl; img.alt = `Frame at ${time.toFixed(2)}s`; img.width = 140; img.height = 80; img.className = 'thumb rounded-lg border';
-        const meta = document.createElement('div'); meta.className = 'flex-1';
-        const headerLine = document.createElement('div'); headerLine.className = 'flex items-center gap-2 flex-wrap';
-        const tBadge = document.createElement('span'); tBadge.className = 'text-xs font-semibold text-slate-600'; tBadge.textContent = `t = ${time.toFixed(2)}s`;
-        const pBadge = document.createElement('span'); pBadge.className = 'text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border';
+        img.src = dataUrl;
+        img.alt = `Frame at ${time.toFixed(2)}s`;
+        img.width = 140; img.height = 80;
+        img.className = 'thumb rounded-lg border';
+        imgWrap.appendChild(img);
+
+        // Change intensity dot
+        const dot = document.createElement('span');
+        dot.className = `change-dot absolute -right-1 -top-1 border border-white shadow ${changeBand === 'high' ? 'change-high' : changeBand === 'med' ? 'change-med' : 'change-low'}`;
+        imgWrap.appendChild(dot);
+
+        const meta = document.createElement('div');
+        meta.className = 'flex-1';
+
+        const headerLine = document.createElement('div');
+        headerLine.className = 'flex items-center gap-2 flex-wrap';
+
+        const idxBadge = document.createElement('span');
+        idxBadge.className = 'text-xs font-semibold text-slate-600';
+        idxBadge.textContent = `#${index + 1} · t=${time.toFixed(2)}s`;
+
+        const pBadge = document.createElement('span');
+        pBadge.className = 'badge rounded-full px-2 py-0.5 border';
         const label = PERSPECTIVES[perspectiveKey]?.label || 'Objective Description';
-        pBadge.textContent = label; if (perspectiveKey === 'fiction') { pBadge.classList.add('border-rose-300','text-rose-700','bg-rose-50'); } else { pBadge.classList.add('border-slate-200','text-slate-600','bg-slate-50'); }
-        headerLine.appendChild(tBadge); headerLine.appendChild(pBadge);
-        const p = document.createElement('p'); p.className = 'text-sm leading-snug'; p.textContent = (perspectiveKey === 'fiction') ? `Creative Fiction — ${text}` : text;
-        meta.appendChild(headerLine); meta.appendChild(p);
-        row.appendChild(img); row.appendChild(meta);
+        pBadge.textContent = label;
+        if (perspectiveKey === 'fiction') {
+          pBadge.classList.add('border-rose-300', 'text-rose-700', 'bg-rose-50');
+        } else {
+          pBadge.classList.add('border-slate-200', 'text-slate-600', 'bg-slate-50');
+        }
+
+        const mBadge = document.createElement('span');
+        mBadge.className = 'badge rounded-full px-2 py-0.5 border';
+        mBadge.textContent = mode === 'continuous' ? 'Continuous' : 'Isolated';
+        mBadge.classList.add(mode === 'continuous' ? 'border-emerald-300','text-emerald-700','bg-emerald-50' : 'border-slate-200','text-slate-600','bg-slate-50');
+
+        const cBadge = document.createElement('span');
+        cBadge.className = 'badge rounded-full px-2 py-0.5 border';
+        cBadge.textContent = `Change: ${changeBand.toUpperCase()} (${(changeScore*100).toFixed(1)}%)`;
+        cBadge.classList.add(changeBand === 'high' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' :
+                             changeBand === 'med' ? 'border-amber-300 text-amber-700 bg-amber-50' :
+                             'border-slate-200 text-slate-600 bg-slate-50');
+
+        headerLine.appendChild(idxBadge);
+        headerLine.appendChild(pBadge);
+        headerLine.appendChild(mBadge);
+        headerLine.appendChild(cBadge);
+
+        if (isKeyMoment) {
+          const km = document.createElement('span');
+          km.className = 'badge rounded-full px-2 py-0.5 border border-emerald-300 text-emerald-700 bg-emerald-50';
+          km.textContent = 'Key moment';
+          headerLine.appendChild(km);
+        }
+
+        const p = document.createElement('p');
+        p.className = 'text-sm leading-snug';
+        p.textContent = (perspectiveKey === 'fiction') ? `Creative Fiction — ${text}` : text;
+
+        meta.appendChild(headerLine);
+        meta.appendChild(p);
+        row.appendChild(imgWrap);
+        row.appendChild(meta);
         this.resultsEl.appendChild(row);
         this.resultsEl.scrollTop = this.resultsEl.scrollHeight;
       }
+
+      _updateSummary() {
+        // Short, flowing cumulative narrative + bullet key events
+        const s = this.analysisState;
+        const header = `<div class="text-sm leading-relaxed">${s.cumulativeNarrative || '<span class="text-slate-500">Summary will build as frames are analyzed…</span>'}</div>`;
+        const events = s.significantEvents.slice(-8).map(ev => `<li><span class="font-medium">${ev.label}</span> at t=${ev.time.toFixed(2)}s — ${ev.brief}</li>`).join('');
+        const list = events ? `<ul class="mt-2 pl-5 list-disc text-xs text-slate-600">${events}</ul>` : '';
+        this.summaryEl.innerHTML = header + list;
+      }
+
       captureFrameBase64() {
-        const { w, h } = this.vp.dimensions; if (!w || !h) throw new Error('Video dimensions not available yet.');
-        this.canvas.width = w; this.canvas.height = h; this.ctx.drawImage(this.vp.video, 0, 0, w, h);
-        const dataUrl = this.canvas.toDataURL('image/png'); const b64 = dataUrl.split(',')[1]; return { b64, dataUrl };
+        const { w, h } = this.vp.dimensions;
+        if (!w || !h) throw new Error('Video dimensions not available yet.');
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this.ctx.drawImage(this.vp.video, 0, 0, w, h);
+        const dataUrl = this.canvas.toDataURL('image/png');
+        const b64 = dataUrl.split(',')[1];
+        return { b64, dataUrl, imageData: this.ctx.getImageData(0, 0, w, h) };
       }
-      async runSequential(stepSec) {
-        this.step = Math.max(1, Math.floor(stepSec || this.step));
-        await this.vp.pause();
-        const duration = this.vp.duration || 0; if (!Number.isFinite(duration) || duration <= 0) { throw new Error('Invalid video duration.'); }
-        const times = []; for (let t = 0; t <= duration + 0.0001; t += this.step) { times.push(Math.min(t, duration)); }
-        for (let i = times.length - 2; i >= 0; i--) { if (Math.abs(times[i] - times[i + 1]) < 1e-6) times.splice(i, 1); }
-        log('Analysis plan', { step: this.step, frames: times.length, duration }); setProgress(0, times.length);
-        const perspectiveKey = this.api.getPerspective(); let done = 0;
-        for (const t of times) {
-          if (this.cancelled) { setStatus('Cancelled', 'bg-amber-100 text-amber-700'); log('Analysis cancelled by user.'); break; }
-          setStatus(`Seeking t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700'); await this.vp.safeSeek(t);
-          let dataUrl, b64; try { const c = this.captureFrameBase64(); b64 = c.b64; dataUrl = c.dataUrl; log('Captured frame', { time: t, width: this.vp.dimensions.w, height: this.vp.dimensions.h, sizeB64: b64.length }); } 
-          catch (e) { log('Capture error', String(e)); this._appendResult({ time: t, dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', text: `Capture error: ${e.message}`, perspectiveKey }); done++; setProgress(done, times.length); continue; }
-          setStatus(`Analyzing t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700');
-          let text; try { text = await this.api.analyzeFrameBase64(b64); log('API response received', text); }
-          catch (e) { log('API failure', String(e)); text = `API error: ${e.message}`; }
-          const frame = { time: t, dataUrl, b64, analyses: { [perspectiveKey]: text } };
-          this.frames.push(frame);
-          this._appendResult({ time: t, dataUrl, text, perspectiveKey });
-          this.onAfterFrame('analyzed', frame);
-          done++; setProgress(done, times.length);
+
+      /**
+       * Compute a simple motion density metric between consecutive frames:
+       * - mean absolute difference over a pixel sample (stride)
+       * - edge-weighted component to be a bit more robust
+       * Returns changeScore in [0..1]
+       */
+      _motionDensity(prevImageData, currImageData, stride = 4) {
+        if (!prevImageData || !currImageData) return 1;
+        const pa = prevImageData.data, ca = currImageData.data;
+        const len = Math.min(pa.length, ca.length);
+        let sum = 0, count = 0;
+        for (let i = 0; i < len; i += 4 * stride) {
+          const dr = Math.abs(ca[i] - pa[i]);
+          const dg = Math.abs(ca[i + 1] - pa[i + 1]);
+          const db = Math.abs(ca[i + 2] - pa[i + 2]);
+          // edge-ish emphasis via max channel diff
+          const diff = Math.max(dr, dg, db);
+          sum += diff;
+          count++;
         }
-        if (!this.cancelled) { setStatus('Complete', 'bg-emerald-100 text-emerald-700'); log('Analysis complete.'); }
+        const mean = count ? sum / (count * 255) : 0;
+        return Math.min(1, Math.max(0, mean));
       }
-      async reanalyzeWithCurrentPerspective() {
-        const perspectiveKey = this.api.getPerspective();
-        if (!this.frames.length) { alert('No captured frames available. Run Analyze Video first.'); return; }
-        setStatus('Re-analyzing', 'bg-indigo-100 text-indigo-700');
-        // Rebuild the stream view for this lens (compare view keeps all lenses via cache)
-        this.resultsEl.innerHTML = '';
-        setProgress(0, this.frames.length);
-        let done = 0;
-        for (const frame of this.frames) {
-          let text = frame.analyses?.[perspectiveKey];
-          if (!text) {
-            try {
-              text = await this.api.analyzeFrameBase64(frame.b64);
-              frame.analyses = frame.analyses || {}; frame.analyses[perspectiveKey] = text;
-              log('Re-analysis API response', { time: frame.time, perspectiveKey, preview: text.slice(0, 120) + (text.length > 120 ? '…' : '') });
-            } catch (e) {
-              text = `API error: ${e.message}`; frame.analyses[perspectiveKey] = text; log('Re-analysis API failure', { time: frame.time, error: String(e) });
+
+      _bandFromChange(score) {
+        if (score >= 0.18) return 'high';
+        if (score >= 0.07) return 'med';
+        return 'low';
+      }
+
+      /**
+       * Intelligent Frame Sampling (REQUIREMENT #5)
+       * - Increase interval during static scenes
+       * - Decrease during high-activity
+       */
+      _adaptiveStep(changeScore) {
+        const base = Math.max(1, Math.floor(this.baseStep));
+        if (changeScore >= 0.25) return Math.max(1, Math.floor(base * 0.5));
+        if (changeScore >= 0.12) return Math.max(1, Math.floor(base * 0.75));
+        if (changeScore <= 0.03) return Math.min(base * 3, base + 8);
+        if (changeScore <= 0.06) return Math.min(base * 2, base + 5);
+        return base;
+      }
+
+      async runSequential(stepSec, mode = 'continuous', perspectiveKey, skipSimilar = true) {
+        this.baseStep = Math.max(1, Math.floor(stepSec || this.baseStep));
+        await this.vp.pause();
+
+        const duration = this.vp.duration || 0;
+        if (!Number.isFinite(duration) || duration <= 0) {
+          throw new Error('Invalid video duration.');
+        }
+        this.analysisState.mode = mode;
+        this.analysisState.perspectiveKey = perspectiveKey;
+
+        // We will seek adaptively instead of pre-computing static times
+        setProgress(0, 0);
+        log('Analysis started', { baseStep: this.baseStep, duration, mode, perspectiveKey });
+        setStatus('Preparing', 'bg-indigo-100 text-indigo-700');
+
+        let t = 0;
+        let idx = 0;
+        let completed = 0;
+        const maxFrames = Math.ceil(duration / 0.5) + 2; // progress denominator upper-bound-ish
+
+        setProgress(0, maxFrames);
+
+        while (t <= duration + 0.0001) {
+          if (this.cancelled) {
+            setStatus('Cancelled', 'bg-amber-100 text-amber-700');
+            log('Analysis cancelled by user.');
+            break;
+          }
+
+          setStatus(`Seeking t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700');
+          await this.vp.safeSeek(t);
+
+          // Capture + motion
+          let dataUrl, b64, imageData;
+          try {
+            const c = this.captureFrameBase64();
+            b64 = c.b64; dataUrl = c.dataUrl; imageData = c.imageData;
+            log('Captured frame', { time: t, width: this.vp.dimensions.w, height: this.vp.dimensions.h, sizeB64: b64.length });
+          } catch (e) {
+            log('Capture error', String(e));
+            this._appendResult({ index: idx, time: t, dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', text: `Capture error: ${e.message}`, perspectiveKey, changeScore: 0, changeBand: 'low', isKeyMoment: false, grouped: false, mode });
+            idx++; completed++; setProgress(completed, maxFrames);
+            t += this.baseStep;
+            continue;
+          }
+
+          const changeScore = this._motionDensity(this._prevImageData, imageData);
+          this._prevImageData = imageData;
+          const changeBand = this._bandFromChange(changeScore);
+
+          // Skip similar frames if requested
+          if (skipSimilar && changeBand === 'low' && this.analysisState.previousDescriptions.length > 0 && mode === 'continuous') {
+            this.analysisState.staticSceneCount++;
+            // Grouping UI: only append a small collapsed stub every few static frames
+            if (this.analysisState.staticSceneCount === 1) {
+              const stubText = 'Static scene continues. Skipped similar frames for efficiency.';
+              this._appendResult({ index: idx, time: t, dataUrl, text: stubText, perspectiveKey, changeScore, changeBand, isKeyMoment: false, grouped: true, mode });
+              this.frames.push({ time: t, dataUrl, b64, change: { density: changeScore, score: changeScore }, analyses: { [perspectiveKey]: { isolated: stubText, continuous: stubText } } });
+              idx++; completed++; setProgress(completed, maxFrames);
             }
           } else {
-            log('Using cached analysis', { time: frame.time, perspectiveKey });
+            // Reset static streak
+            this.analysisState.staticSceneCount = 0;
+
+            // Build context-aware prompt (REQUIREMENT #2 + #3 + #8)
+            setStatus(`Analyzing t=${t.toFixed(2)}s`, 'bg-indigo-100 text-indigo-700');
+            let text = '';
+            try {
+              if (mode === 'continuous') {
+                text = await this.api.analyzeFrameWithContext({
+                  base64Image: b64,
+                  frameIndex: idx,
+                  perspectiveKey,
+                  previousContext: this.analysisState.previousDescriptions,
+                  cumulativeNarrative: this.analysisState.cumulativeNarrative
+                });
+              } else {
+                // isolated legacy call = first prompt of the perspective (objective)
+                const prompt = idx === 0 ? PERSPECTIVES[perspectiveKey].first : 'Describe this frame independently and concisely.';
+                text = await this.api._callGemini({ pngB64: b64, prompt });
+              }
+              log('API response received', text);
+            } catch (e) {
+              log('API failure', String(e));
+              text = `API error: ${e.message}`;
+            }
+
+            // Keep a rolling window of last 3 descriptions (REQUIREMENT #1)
+            const descToStore = (perspectiveKey === 'fiction') ? text.replace(/^Creative Fiction\s*—\s*/i,'') : text;
+            this.analysisState.previousDescriptions.push(descToStore);
+            if (this.analysisState.previousDescriptions.length > 3) this.analysisState.previousDescriptions.shift();
+
+            // Update cumulative narrative (lightweight stitching)
+            if (perspectiveKey === 'fiction') {
+              // For fiction, keep a flowing first-person story
+              if (idx === 0) {
+                this.analysisState.cumulativeNarrative = `Story begins: ${descToStore}`;
+              } else {
+                this.analysisState.cumulativeNarrative += ` → ${descToStore}`;
+              }
+            } else {
+              // For analytical modes, maintain a succinct, flowing narrative
+              if (idx === 0) {
+                this.analysisState.cumulativeNarrative = `Initial: ${descToStore}`;
+              } else {
+                // Prefer sentences that indicate change
+                const brief = descToStore.replace(/\s+/g, ' ').trim();
+                this.analysisState.cumulativeNarrative += ` → ${brief}`;
+              }
+            }
+
+            // Detect significant events (very high change OR keywords)
+            let isKeyMoment = changeBand === 'high';
+            const lower = text.toLowerCase();
+            const keywords = ['enters','leaves','exits','collision','crowd','running','sudden','stop','starts','appears','disappears','transition'];
+            if (!isKeyMoment && keywords.some(k => lower.includes(k))) isKeyMoment = true;
+            if (isKeyMoment) {
+              this.analysisState.significantEvents.push({
+                time: t,
+                label: 'Significant change',
+                brief: (text.length > 90 ? text.slice(0, 90) + '…' : text)
+              });
+            }
+
+            // Cache (both isolated and continuous for compatibility)
+            const existing = this.frames[idx] || { time: t, dataUrl, b64, change: { density: changeScore, score: changeScore }, analyses: {} };
+            const per = existing.analyses[perspectiveKey] || { isolated: null, continuous: null };
+            if (mode === 'continuous') per.continuous = text;
+            else per.isolated = text;
+            existing.analyses[perspectiveKey] = per;
+            existing.time = t;
+            existing.dataUrl = dataUrl;
+            existing.b64 = b64;
+            existing.change = { density: changeScore, score: changeScore };
+            this.frames[idx] = existing;
+
+            // Render
+            this._appendResult({
+              index: idx, time: t, dataUrl, text,
+              perspectiveKey, changeScore, changeBand, isKeyMoment, grouped: false, mode
+            });
+
+            // Update summary UI
+            this._updateSummary();
           }
-          this._appendResult({ time: frame.time, dataUrl: frame.dataUrl, text, perspectiveKey });
-          this.onAfterFrame('reanalyzed', frame);
+
+          // Adaptive sampling next step
+          const nextStep = this._adaptiveStep(changeScore);
+          this.analysisState.lastChangeScore = changeScore;
+          idx++;
+          completed++; setProgress(completed, maxFrames);
+          t += nextStep;
+        }
+
+        if (!this.cancelled) {
+          setStatus('Complete', 'bg-emerald-100 text-emerald-700');
+          log('Analysis complete.');
+          // Final pass: group long static runs visually by collapsing adjacent static-group rows (already styled)
+        }
+      }
+
+      async reanalyzeWithCurrentPerspective(mode = 'continuous') {
+        const perspectiveKey = this.analysisState.perspectiveKey;
+        if (!this.frames.length) {
+          alert('No captured frames available. Run Analyze Video first.');
+          return;
+        }
+        setStatus('Re-analyzing', 'bg-indigo-100 text-indigo-700');
+        this.resultsEl.innerHTML = '';
+        this.summaryEl.innerHTML = '<p class="text-slate-500">Rebuilding summary…</p>';
+        setProgress(0, this.frames.length);
+
+        // Reset continuity for re-analysis
+        this.analysisState.previousDescriptions = [];
+        this.analysisState.cumulativeNarrative = '';
+        this.analysisState.significantEvents = [];
+        this.analysisState.staticSceneCount = 0;
+
+        let done = 0;
+        for (let idx = 0; idx < this.frames.length; idx++) {
+          const frame = this.frames[idx];
+          // Recompute change band for UI consistency
+          const changeScore = frame.change?.score ?? 0;
+          const changeBand = this._bandFromChange(changeScore);
+
+          let text;
+          if (mode === 'continuous') {
+            try {
+              text = await this.api.analyzeFrameWithContext({
+                base64Image: frame.b64,
+                frameIndex: idx,
+                perspectiveKey,
+                previousContext: this.analysisState.previousDescriptions,
+                cumulativeNarrative: this.analysisState.cumulativeNarrative
+              });
+            } catch (e) {
+              text = `API error: ${e.message}`;
+            }
+            // Cache continuous
+            frame.analyses[perspectiveKey] = frame.analyses[perspectiveKey] || {};
+            frame.analyses[perspectiveKey].continuous = text;
+            // Update continuity memory
+            const descToStore = (perspectiveKey === 'fiction') ? text.replace(/^Creative Fiction\s*—\s*/i,'') : text;
+            this.analysisState.previousDescriptions.push(descToStore);
+            if (this.analysisState.previousDescriptions.length > 3) this.analysisState.previousDescriptions.shift();
+            if (perspectiveKey === 'fiction') {
+              this.analysisState.cumulativeNarrative = idx === 0 ? `Story begins: ${descToStore}` : (this.analysisState.cumulativeNarrative + ` → ${descToStore}`);
+            } else {
+              this.analysisState.cumulativeNarrative = idx === 0 ? `Initial: ${descToStore}` : (this.analysisState.cumulativeNarrative + ` → ${descToStore}`);
+            }
+          } else {
+            // isolated
+            text = frame.analyses?.[perspectiveKey]?.isolated;
+            if (!text) {
+              try {
+                text = await this.api._callGemini({ pngB64: frame.b64, prompt: 'Describe this frame independently and concisely.' });
+              } catch (e) {
+                text = `API error: ${e.message}`;
+              }
+              frame.analyses[perspectiveKey] = frame.analyses[perspectiveKey] || {};
+              frame.analyses[perspectiveKey].isolated = text;
+            }
+          }
+
+          const isKeyMoment = changeBand === 'high';
+          this._appendResult({
+            index: idx,
+            time: frame.time,
+            dataUrl: frame.dataUrl,
+            text,
+            perspectiveKey,
+            changeScore,
+            changeBand,
+            isKeyMoment,
+            grouped: false,
+            mode
+          });
+
+          this._updateSummary();
           done++; setProgress(done, this.frames.length);
         }
-        setStatus('Complete', 'bg-emerald-100 text-emerald-700'); log('Re-analysis complete.', { perspectiveKey });
+
+        setStatus('Complete', 'bg-emerald-100 text-emerald-700');
+        log('Re-analysis complete.', { perspectiveKey, mode });
       }
-      /** Generate text report of the current perspective */
-      buildReport(perspectiveKey, meta = {}) {
+
+      /** Generate text report with flowing narrative + highlights (REQUIREMENT #7 + #10) */
+      buildReport(perspectiveKey, { fileName, mode = 'continuous', highlightsOnly = false } = {}) {
         const now = new Date();
         const header = [
           'AI Frame Analyzer — Downloaded Analysis',
           `Timestamp: ${now.toISOString()}`,
-          `Video file: ${meta.fileName || 'unknown_video'}`,
+          `Video file: ${fileName || 'unknown_video'}`,
           `Perspective: ${PERSPECTIVES[perspectiveKey]?.label || perspectiveKey}`,
-          `Total frames: ${this.frames.length}`,
+          `Mode: ${mode}`,
+          `Total frames captured: ${this.frames.length}`,
           ''
         ].join('\n');
+
+        const summary = [
+          '# Video Summary (Flowing Narrative)',
+          this.analysisState.cumulativeNarrative || '(no cumulative narrative available)',
+          '',
+          '# Key Moments',
+          ...(this.analysisState.significantEvents.length
+            ? this.analysisState.significantEvents.map(ev => `- t=${ev.time.toFixed(2)}s — ${ev.brief}`)
+            : ['(none detected)']),
+          ''
+        ].join('\n');
+
         const body = this.frames.map((f, idx) => {
-          const txt = f.analyses?.[perspectiveKey] ?? '(no analysis cached for this perspective — run re-analysis)';
+          const entry = f.analyses?.[perspectiveKey] || {};
+          const txt = mode === 'continuous' ? (entry.continuous ?? '(no continuous analysis cached)') : (entry.isolated ?? '(no isolated analysis cached)');
+          const isHighlight = (f.change?.score ?? 0) >= 0.18;
+          if (highlightsOnly && !isHighlight) return null;
           const label = (perspectiveKey === 'fiction') ? 'Creative Fiction — ' : '';
-          return [`Frame ${idx + 1} — t=${f.time.toFixed(2)}s`, `${label}${txt}`, ''].join('\n');
-        }).join('\n');
-        return header + body;
-      }
-    }
+          const band = this._bandFromChange(f.change?.score ?? 0).toUpperCase();
+          return [
+            `Frame ${idx + 1} — t=${f.time.toFixed(2)}s — Change=${band} (${((f.change?.score ?? 0)*100).toFixed(1)}%)`,
+            `${label}${txt}`,
+            ''
+          ].join('\n');
+        }).filter(Boolean).join('\n');
 
-    /**************************************************************
-     * Compare table rendering + CSV export
-     **************************************************************/
-    const compareTable = document.getElementById('compareTable');
-    const compareWrapper = document.getElementById('compareTableWrapper');
-    const wrapToggle = document.getElementById('wrapToggle');
-    const showFictionToggle = document.getElementById('showFictionToggle');
-
-    function perspectiveSort(a, b) {
-      const order = ['objective','urban','social','safety','accessibility','fiction'];
-      return order.indexOf(a) - order.indexOf(b);
-    }
-
-    function getActivePerspectiveKeys(frames, includeFiction = true) {
-      const keys = new Set();
-      for (const f of frames) {
-        for (const k of Object.keys(f.analyses || {})) {
-          if (!includeFiction && k === 'fiction') continue;
-          keys.add(k);
+        // Mark transition points (change from low/med to high)
+        const transitions = [];
+        let prevBand = '';
+        for (const f of this.frames) {
+          const band = this._bandFromChange(f.change?.score ?? 0);
+          if (prevBand && band === 'high' && prevBand !== 'high') {
+            transitions.push(`t=${f.time.toFixed(2)}s — Transition into HIGH activity`);
+          }
+          prevBand = band;
         }
-      }
-      return Array.from(keys).sort(perspectiveSort);
-    }
+        const transitionsSection = [
+          '# Transition Points',
+          ...(transitions.length ? transitions : ['(none detected)']),
+          ''
+        ].join('\n');
 
-    function renderCompareTable(frames) {
-      compareTable.innerHTML = '';
-      if (!frames.length) {
-        compareTable.innerHTML = '<thead><tr><th class="text-left p-2 text-slate-500">No data yet — run an analysis.</th></tr></thead>';
-        return;
+        return [header, summary, transitionsSection, body].join('\n');
       }
-      const includeFiction = showFictionToggle.checked;
-      const cols = getActivePerspectiveKeys(frames, includeFiction);
-      // Header
-      const thead = document.createElement('thead');
-      const hr = document.createElement('tr');
-      const baseHeads = ['#','Time','Thumb'];
-      for (const h of baseHeads) {
-        const th = document.createElement('th'); th.className = 'p-2 text-left text-xs uppercase tracking-wide text-slate-500 border-b'; th.textContent = h; hr.appendChild(th);
-      }
-      for (const key of cols) {
-        const th = document.createElement('th'); th.className = 'p-2 text-left text-xs uppercase tracking-wide text-slate-500 border-b'; th.textContent = PERSPECTIVES[key]?.label || key; hr.appendChild(th);
-      }
-      thead.appendChild(hr); compareTable.appendChild(thead);
-      // Body
-      const tbody = document.createElement('tbody');
-      frames.forEach((f, idx) => {
-        const tr = document.createElement('tr');
-        const tdIndex = document.createElement('td'); tdIndex.className = 'align-top p-2 text-slate-500 text-xs border-b'; tdIndex.textContent = String(idx + 1); tr.appendChild(tdIndex);
-        const tdTime = document.createElement('td'); tdTime.className = 'align-top p-2 text-slate-700 text-xs border-b'; tdTime.textContent = `${f.time.toFixed(2)}s`; tr.appendChild(tdTime);
-        const tdThumb = document.createElement('td'); tdThumb.className = 'align-top p-2 border-b'; tdThumb.innerHTML = `<img src="${f.dataUrl}" alt="t=${f.time.toFixed(2)}s" class="thumb rounded border"/>`; tr.appendChild(tdThumb);
-        for (const key of cols) {
-          const td = document.createElement('td'); td.className = 'align-top p-2 border-b';
-          const text = f.analyses?.[key] || '';
-          const isFic = key === 'fiction' && text;
-          const wrapClass = wrapToggle.checked ? 'whitespace-normal' : 'whitespace-nowrap overflow-x-auto block max-w-[28rem]';
-          td.innerHTML = `<div class="text-sm ${wrapClass} ${isFic ? 'text-rose-700' : 'text-slate-800'}">${isFic ? 'Creative Fiction — ' : ''}${escapeHtml(text)}</div>`;
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      });
-      compareTable.appendChild(tbody);
-    }
-
-    function escapeHtml(str) { return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s])); }
-
-    function exportCompareCsv(frames) {
-      if (!frames.length) { alert('No data to export yet.'); return; }
-      const includeFiction = showFictionToggle.checked;
-      const cols = getActivePerspectiveKeys(frames, includeFiction);
-      const headers = ['index','time_s','thumbnail_dataurl', ...cols.map(k => (PERSPECTIVES[k]?.label || k).replace(/[,\n]/g,' '))];
-      const rows = [headers.join(',')];
-      frames.forEach((f, i) => {
-        const values = [i+1, f.time.toFixed(2), f.dataUrl];
-        for (const k of cols) { values.push((f.analyses?.[k] || '').replaceAll('\n',' ').replaceAll('"','""')); }
-        const csvLine = values.map(v => `"${String(v)}"`).join(',');
-        rows.push(csvLine);
-      });
-      const csv = rows.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'analysis_compare.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      log('Compare CSV generated', { rows: frames.length });
     }
 
     /**************************************************************
@@ -573,7 +966,6 @@
     const cancelBtn = document.getElementById('cancelBtn');
     const reanalyzeBtn = document.getElementById('reanalyzeBtn');
     const downloadBtn = document.getElementById('downloadBtn');
-    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
     const stepInput = document.getElementById('stepSeconds');
     const apiKeyInput = document.getElementById('apiKey');
     const perspectiveSelect = document.getElementById('perspectiveSelect');
@@ -581,118 +973,153 @@
     const clearLogBtn = document.getElementById('clearLog');
     const copyLogBtn = document.getElementById('copyLog');
     const resultsEl = document.getElementById('results');
-    const tabStreamBtn = document.getElementById('tabStream');
-    const tabCompareBtn = document.getElementById('tabCompare');
-    const compareContainer = document.getElementById('compareContainer');
 
     const vp = new VideoPlayer(videoEl);
     const api = new APIManager(() => apiKeyInput.value.trim() || '');
+    let analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5 });
 
-    function onAfterFrame() { renderCompareTable(analyzer.frames); }
-
-    let analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5, onAfterFrame });
-
+    // Keep UI responsive states
     function setWorking(isWorking) {
       analyzeBtn.disabled = isWorking;
       cancelBtn.classList.toggle('hidden', !isWorking);
       reanalyzeBtn.disabled = isWorking;
       downloadBtn.disabled = isWorking;
-      downloadCsvBtn.disabled = isWorking;
+      fileInput.disabled = isWorking;
+      perspectiveSelect.disabled = isWorking;
+      stepInput.disabled = isWorking;
     }
-
-    // Tabs
-    function activateTab(which) {
-      const isStream = which === 'stream';
-      resultsEl.classList.toggle('hidden', !isStream);
-      compareContainer.classList.toggle('hidden', isStream);
-      tabStreamBtn.classList.toggle('bg-slate-900', isStream);
-      tabStreamBtn.classList.toggle('text-white', isStream);
-      tabCompareBtn.classList.toggle('bg-slate-900', !isStream);
-      tabCompareBtn.classList.toggle('text-white', !isStream);
-      if (!isStream) renderCompareTable(analyzer.frames);
-    }
-    tabStreamBtn.addEventListener('click', () => activateTab('stream'));
-    tabCompareBtn.addEventListener('click', () => activateTab('compare'));
-    activateTab('stream');
 
     // Load file
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
-      try { await vp.loadFile(file); setStatus('Ready', 'bg-slate-100 text-slate-700'); }
-      catch (err) { log('File load error', String(err)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(err.message); }
+      try {
+        await vp.loadFile(file);
+        setStatus('Ready', 'bg-slate-100 text-slate-700');
+      } catch (err) {
+        log('File load error', String(err));
+        setStatus('Error', 'bg-rose-100 text-rose-700');
+        alert(err.message);
+      }
     });
 
-    // Perspective changes
+    // Perspective changes (before/after analysis)
     perspectiveSelect.addEventListener('change', (e) => {
-      const key = e.target.value; api.setPerspective(key); log('Perspective changed via UI', { key, label: PERSPECTIVES[key]?.label });
+      const key = e.target.value;
+      api.setPerspective(key);
+      analyzer.analysisState.perspectiveKey = key;
+      log('Perspective changed via UI', { key, label: PERSPECTIVES[key]?.label });
     });
+    // Initialize API perspective to match UI default
     api.setPerspective(perspectiveSelect.value);
+
+    // Mode + options
+    const modeInputs = [...document.querySelectorAll('input[name="mode"]')];
+    const skipSimilarInput = document.getElementById('skipSimilar');
+    const highlightsOnlyInput = document.getElementById('highlightsOnly');
 
     // Analyze button
     analyzeBtn.addEventListener('click', async () => {
       if (!vp.loaded) { alert('Please upload a video first.'); return; }
       if (!apiKeyInput.value.trim()) { alert('Please paste your Gemini API key.'); return; }
+
       setWorking(true);
-      resultsEl.innerHTML = '';
-      analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5, onAfterFrame });
+      resultsEl.innerHTML = ''; // fresh run
+      analyzer = new FrameAnalyzer(vp, api, { step: Number(stepInput.value) || 5 });
+      analyzer.skipSimilar = !!skipSimilarInput.checked;
+      analyzer.highlightsOnly = !!highlightsOnlyInput.checked;
       analyzer.resetUI();
-      try { await analyzer.runSequential(Number(stepInput.value) || 5); }
-      catch (e) { log('Fatal analysis error', String(e)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(`Analysis failed: ${e.message}`); }
-      finally { setWorking(false); renderCompareTable(analyzer.frames); }
+
+      const mode = modeInputs.find(i => i.checked)?.value || 'continuous';
+      const perspectiveKey = perspectiveSelect.value;
+
+      try {
+        await analyzer.runSequential(Number(stepInput.value) || 5, mode, perspectiveKey, analyzer.skipSimilar);
+      } catch (e) {
+        log('Fatal analysis error', String(e));
+        setStatus('Error', 'bg-rose-100 text-rose-700');
+        alert(`Analysis failed: ${e.message}`);
+      } finally {
+        setWorking(false);
+      }
     });
 
     // Cancel
-    cancelBtn.addEventListener('click', () => { analyzer.cancel(); cancelBtn.classList.add('hidden'); analyzeBtn.disabled = false; });
+    cancelBtn.addEventListener('click', () => {
+      analyzer.cancel();
+      cancelBtn.classList.add('hidden');
+      analyzeBtn.disabled = false;
+    });
 
-    // Re-analyze
+    // Re-analyze previously captured frames with selected perspective (rebuild continuity)
     reanalyzeBtn.addEventListener('click', async () => {
       if (!apiKeyInput.value.trim()) { alert('Please paste your Gemini API key.'); return; }
       setWorking(true);
-      try { await analyzer.reanalyzeWithCurrentPerspective(); }
-      catch (e) { log('Re-analysis error', String(e)); setStatus('Error', 'bg-rose-100 text-rose-700'); alert(`Re-analysis failed: ${e.message}`); }
-      finally { setWorking(false); renderCompareTable(analyzer.frames); }
+      analyzer.skipSimilar = !!skipSimilarInput.checked;
+      analyzer.highlightsOnly = !!highlightsOnlyInput.checked;
+      const mode = modeInputs.find(i => i.checked)?.value || 'continuous';
+      try {
+        await analyzer.reanalyzeWithCurrentPerspective(mode);
+      } catch (e) {
+        log('Re-analysis error', String(e));
+        setStatus('Error', 'bg-rose-100 text-rose-700');
+        alert(`Re-analysis failed: ${e.message}`);
+      } finally {
+        setWorking(false);
+      }
     });
 
-    // Download analysis as text (current perspective)
+    // Download analysis as text (with "highlights only" option)
     downloadBtn.addEventListener('click', () => {
       const perspectiveKey = api.getPerspective();
       if (!analyzer.frames.length) { alert('No analysis to export yet.'); return; }
-      const report = analyzer.buildReport(perspectiveKey, { fileName: vp.fileName });
+      const mode = modeInputs.find(i => i.checked)?.value || 'continuous';
+      const report = analyzer.buildReport(perspectiveKey, {
+        fileName: vp.fileName,
+        mode,
+        highlightsOnly: !!highlightsOnlyInput.checked
+      });
       const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const safeName = (vp.fileName || 'video').replace(/[^\w.-]+/g, '_');
       const label = (PERSPECTIVES[perspectiveKey]?.label || perspectiveKey).replace(/[^\w.-]+/g, '_');
-      a.href = url; a.download = `analysis_${safeName}_${label}.txt`;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      const suffix = analyzer.highlightsOnly ? '_HIGHLIGHTS' : '';
+      a.href = url;
+      a.download = `analysis_${safeName}_${label}_${mode}${suffix}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
       log('Download generated', { fileName: a.download, bytes: report.length });
     });
 
-    // Download compare CSV
-    downloadCsvBtn.addEventListener('click', () => exportCompareCsv(analyzer.frames));
-
-    // Compare controls
-    wrapToggle.addEventListener('change', () => renderCompareTable(analyzer.frames));
-    showFictionToggle.addEventListener('change', () => renderCompareTable(analyzer.frames));
-
-    // Clear results (stream view only — keeps frames for compare/exports)
+    // Clear results
     clearResultsBtn.addEventListener('click', () => {
       resultsEl.innerHTML = '<p class="text-sm text-slate-500">No analysis yet. Thumbnails and frame descriptions will appear here.</p>';
-      log('Results (stream) cleared. Frames retained for comparison.');
+      document.getElementById('summary').innerHTML = '<p class="text-slate-500">No summary yet. Start an analysis to build a flowing narrative.</p>';
+      log('Results cleared.');
+      // Keep captured frames; user may still reanalyze or download
     });
 
     // Log utilities
-    clearLogBtn.addEventListener('click', () => { logEl.innerHTML = ''; log('Log cleared.'); });
+    clearLogBtn.addEventListener('click', () => {
+      logEl.innerHTML = '';
+      log('Log cleared.');
+    });
     copyLogBtn.addEventListener('click', async () => {
       const texts = [...logEl.querySelectorAll('li')].map(li => li.innerText);
       const joined = texts.join('\n');
-      try { await navigator.clipboard.writeText(joined); log('Log copied to clipboard.'); }
-      catch { prompt('Copy the log below:', joined); }
+      try {
+        await navigator.clipboard.writeText(joined);
+        log('Log copied to clipboard.');
+      } catch {
+        prompt('Copy the log below:', joined);
+      }
     });
 
-    // Initial state
-    document.getElementById('results').innerHTML = '<p class="text-sm text-slate-500">No analysis yet. Thumbnails and frame descriptions will appear here.</p>';
-    log('App initialized. Awaiting video and API key.');
+    // Initial log
+    log('App initialized. Continuous analysis enabled. Awaiting video and API key.');
   </script>
 </body>
 </html>
+```
